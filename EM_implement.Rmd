@@ -1,0 +1,152 @@
+---
+title: "EM for multivariate normal mixtures"
+author: "Yunqi Yang"
+date: "1/22/2020"
+output: html_document
+---
+
+
+```{r  }
+library(Matrix)
+library(mvtnorm)
+library(ggplot2)
+library(cowplot)
+```
+
+
+# Function for simulating data.
+```{r  }
+
+sim.data = function(n, w, U){
+    
+
+   ## w: the true weight
+   ## k: number of classes
+   k = length(w)
+   
+   ## dimension of an obs. 
+   m = nrow(U[[1]])
+   
+   ## generate true class variable  
+   Z = sample(1:k, n, prob = w, replace = T)  
+    
+   ## store simulated data
+   X = matrix(NA, ncol = m, nrow = n)
+   
+   for (i in 1:n){
+     # true class for obs. i 
+     j = Z[i]
+     X[i, ] = rmvnorm(1, sigma = U[[j]])
+   }
+   res = list(X = X, Z = Z)
+   return(res)
+}
+
+
+                  
+```
+
+
+
+
+
+2. EM algorithm 
+
+```{r  }
+# Peter's function for compute log.likelihood
+loglik.compute <- function (X, w, U) {
+  n <- nrow(X)
+  k <- length(w)
+  y <- rep(0,n)
+  for (j in 1:k)
+    y <- y + w[j] * dmvnorm(X,sigma = U[[j]])
+  return(sum(log(y)))
+}
+
+```
+
+
+# EM algorithm for fitting the mixture  model.
+```{r  }
+
+EM.fit <- function(X, w, U, maxiter, diff){
+  
+  # Get the number of samples (n) and the number of mixture components (k)
+  n <- nrow(X)
+  k <- length(w)
+  # store loglikelihood
+  logliks = c()
+  ll <- -Inf
+
+  for (iter in 1:maxiter){
+    # store parameters and likelihood in the previous step 
+    w0  <- w
+    U0  <- U
+    ll0 <- ll 
+    logliks = c(logliks, ll)
+  
+    # E-step: calculate posterior probabilities using the current mu and sigmas
+    P = matrix(0, nrow = n, ncol = k)
+    for (j in 1:k){
+      P[,j] = w[j] * dmvnorm(X,sigma = U[[j]])
+      }
+    P = P/rowSums(P)   
+  
+    # M-step: 
+    ## use current probabilities to update covariance matrix 
+    for (j in 1:k){
+      U[[j]] = t(X)%*%(P[,j]*X)/sum(P[,j])
+    }
+  
+    ## update mixture weight
+    w = colSums(P)/n
+
+    # Compute log-likelihood.
+    ll            <- loglik.compute(X,w,U)
+    logliks[iter] <- ll
+
+    # Check stopping criterion.
+    d = max(abs(w - w0))
+    if (d < diff)
+      break
+    }
+    return(list(w = w, U = U, logliks = logliks))
+}
+
+
+
+```
+
+
+```{r  }
+
+# SIMULATE DATA
+n <- 10000
+w <- c(0.6,0.3,0.1)
+U <- list(U1 = matrix(c(1,0.5,0, 0.5,1, 0.5, 0, 0.5, 1), nrow = 3, ncol = 3),
+      U2 = matrix(c(1,0.5,0.25, 0.5,1, 0.5, 0.25, 0.5, 1), nrow = 3, ncol = 3),
+      U3 = rbind(diag(3)))
+dt <- sim.data(1000,w,U)
+X  <- dt$X
+
+
+```
+
+
+```{r  }
+
+# FIT MIXTURE MODEL
+w.init = c(0.1, 0.1, 0.8)
+res = EM.fit(X, w.init, U, maxiter = 10000, diff = 0)
+res[[1]]
+print(range(diff(res$logliks)))
+
+
+
+
+```
+
+
+
+
+
