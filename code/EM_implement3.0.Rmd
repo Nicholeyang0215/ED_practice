@@ -1,0 +1,237 @@
+---
+title: "EM for multivariate normal mixtures"
+author: "Yunqi Yang"
+date: "1/22/2020"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+# Add code for estimating means for the mixture. 
+
+```{r  }
+library(Matrix)
+library(mvtnorm)
+library(ggplot2)
+library(cowplot)
+```
+
+
+# Function for simulating data.
+
+```{r  }
+sim.data = function(n, w, U, mu){
+
+   # w: the true weight
+   # mu: a k*m matrix 
+   # dimension of an obs. 
+   m = nrow(U[[1]])
+   # k: number of classes
+   k = length(w)
+   
+   # generate true class variable  
+   Z = sample(1:k, n, prob = w, replace = T)  
+    
+   # store simulated data
+   X = matrix(NA, ncol = m, nrow = n)
+   
+   for (i in 1:n){
+     # true class for obs. i 
+     j = Z[i]
+     X[i, ] = rmvnorm(1,mean = mu[j, ], sigma = U[[j]])
+   }
+   res = list(X = X, Z = Z)
+   return(res)
+}
+                  
+```
+
+
+# EM algorithm 
+
+## Function for compute log_likelihood
+
+```{r  }
+
+# here mu is a k by m matrix. m is the dimension of the obs. 
+loglik.compute <- function (X, w, U, mu) {
+  n <- nrow(X)
+  k <- length(w)
+  y <- rep(0,n)
+  for (j in 1:k)
+    y <- y + w[j] * dmvnorm(X, mean = mu[j, ], sigma = U[[j]])
+  return(sum(log(y)))
+}
+
+```
+
+
+## Function for log-renormalize weights
+```{r  }
+
+# normalizelogweights takes as input an array of unnormalized
+# log-probabilities logw and returns normalized probabilities such
+# that the sum is equal to 1.
+
+normalizelogweights <- function (logw){
+  # Guard against underflow or overflow by adjusting the
+  # log-probabilities so that the largest probability is 1.
+  c <- max(logw)
+  w <- exp(logw - c)
+  # Normalize the probabilities.
+  return(w/sum(w))
+}
+
+```
+
+
+
+## EM algorithm for fitting the mixture  model.
+```{r  }
+
+EM.fit <- function(X, w, U, mu, maxiter, diff){
+  
+  # Get the number of samples (n) and the number of mixture components (k)
+  n <- nrow(X)
+  k <- length(w)
+  m <- ncol(X)
+  
+  # store loglikelihood
+  logliks = c()
+  ll <- -Inf
+
+  for (iter in 1:maxiter){
+    # store parameters and likelihood in the previous step 
+    mu0 <- mu
+    w0  <- w
+    U0  <- U
+    ll0 <- ll 
+    logliks = c(logliks, ll)
+  
+    # E-step: calculate posterior probabilities using the current mu and sigmas
+    logP = matrix(0, nrow = n, ncol = k)
+    for (j in 1:k){
+      # log-density 
+      logP[,j] = w[j] * dmvnorm(X, mean = mu[j, ], sigma = U[[j]], log = TRUE)
+    }
+    P = t(apply(logP, 1, function(x) normalizelogweights(x)))
+    #P = P/rowSums(P)   
+  
+    # M-step: 
+    # use current probabilities to update means
+    for (j in 1:k){
+      mu[j, ] = P[,j] %*% X/sum(P[,j])
+    }
+    
+    # update covariance matrix 
+    for (j in 1:k){
+      mm = matrix(mu[j,], nrow = n, ncol = m, byrow = TRUE)
+      U[[j]] = t(X-mm)%*%(P[,j]*(X-mm))/sum(P[,j])
+    }
+  
+    # update mixture weight
+    w = colSums(P)/n
+    
+    # Compute log-likelihood.
+    ll = loglik.compute(X, w, U, mu)
+    logliks[iter] = ll
+
+    # Check stopping criterion.
+    d = max(abs(w - w0))
+    if (d < diff)
+      break
+    }
+    return(list(w = w, U = U, mu = mu, logliks = logliks))
+}
+
+```
+
+
+```{r  }
+
+# SIMULATE DATA
+n <- 1e4
+w <- c(0.6, 0.3, 0.1)
+U = list(U1 = diag(3), U2 = matrix(c(1, 0.9, 0, 0.9, 1, 0, 0, 0, 1), ncol = 3, nrow =3),
+         U3 = matrix(c(1, 0, 0.5, 0, 1, 0, 0.5, 0, 1), ncol = 3, nrow = 3))
+
+mu = matrix(c(0, 15, 30), nrow = 3, ncol = 3)
+dt <- sim.data(n, w, U, mu)
+X  <- dt$X
+
+```
+
+
+```{r  }
+
+# FIT MIXTURE MODEL
+w.init = c(0.3, 0.5, 0.2)
+mu.init = matrix(c(0, 10, 25), nrow = 3, ncol = 3)
+
+U.init = list(U1 = matrix(c(1, 0.1, 0.3, 0.1, 1, 0, 0.3, 0 ,1), ncol = 3, nrow =3), 
+              U2 = diag(3), U3 = diag(3))
+res = EM.fit(X, w.init, U.init, mu.init, maxiter = 1e3, diff = 1e-3)
+plot(res$logliks)
+
+```
+
+
+
+
+```{r  }
+
+
+# Get the number of samples (n) and the number of mixture components (k)
+  n <- nrow(X)
+  k <- length(w)
+  m <- ncol(X)
+  
+  # store loglikelihood
+  logliks = c()
+  ll <- -Inf
+
+ # for (iter in 1:maxiter){
+    # store parameters and likelihood in the previous step 
+    mu0 <- mu.init
+    w0  <- w.init
+    U0  <- U
+    ll0 <- ll 
+    logliks = c(logliks, ll)
+  
+    # E-step: calculate posterior probabilities using the current mu and sigmas
+    logP = matrix(0, nrow = n, ncol = k)
+    P = matrix(0, nrow = n, ncol = k)
+    
+    for (j in 1:k){
+      # log-density 
+      logP[,j] = w[j] * dmvnorm(X, mean = mu[j, ], sigma = U[[j]], log = TRUE)
+    }
+    P = t(apply(logP, 1, function(x) normalizelogweights(x)))
+    
+    #P = P/rowSums(P)   
+  
+    # M-step: 
+    # use current probabilities to update means
+    for (j in 1:k){
+      mu[j, ] = P[,j] %*% X/sum(P[,j])
+    }
+    
+    # update covariance matrix 
+    for (j in 1:k){
+      mm = matrix(mu[j,], nrow = n, ncol = m, byrow = TRUE)
+      U[[j]] = t(X-mm)%*%(P[,j]*(X-mm))/sum(P[,j])
+    }
+  
+    # update mixture weight
+    w = colSums(P)/n
+    
+    # Compute log-likelihood.
+    ll = loglik.compute(X, w, U, mu)
+    logliks[iter] = ll
+```
+
+
+
+
+
+
