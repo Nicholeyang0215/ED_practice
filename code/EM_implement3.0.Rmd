@@ -3,8 +3,8 @@ title: "EM for multivariate normal mixtures"
 author: "Yunqi Yang"
 date: "1/22/2020"
 output:
-  pdf_document: default
   html_document: default
+  pdf_document: default
 ---
 
 # Add code for estimating means for the mixture. 
@@ -166,7 +166,7 @@ X  <- dt$X
 
 # FIT MIXTURE MODEL
 w.init = c(0.3, 0.5, 0.2)
-mu.init = matrix(c(-50, 5, 25), nrow = 3, ncol = 3)
+mu.init = matrix(c(-100, -100, -100), nrow = 3, ncol = 3)
 
 U.init = list(U1 = matrix(c(1, 0.1, 0.3, 0.1, 1, 0, 0.3, 0 ,1), ncol = 3, nrow =3), 
               U2 = diag(3), U3 = diag(3))
