@@ -1,0 +1,50 @@
+---
+title: "EM on GTEx data"
+author: "Yunqi Yang"
+date: "2/14/2020"
+output: html_document
+---
+
+```{r  }
+
+library(Matrix)
+library(mvtnorm)
+library(ggplot2)
+library(cowplot)
+library(corrplot)
+
+load("/Users/nicholeyang/Desktop/Rotation/EM/data/sub_zstrong.RData")
+colnames(sub_zstrong)
+
+```
+
+```{r  }
+## remove Inf and zero zscore
+inf_indx = apply(sub_zstrong, 1, function(x) any(x == Inf))
+zero_indx = apply(sub_zstrong, 1, function(x) any(x == 0))
+zstrong = sub_zstrong[(inf_indx + zero_indx) == 0, ]
+dim(zstrong)
+
+any(zstrong == Inf)
+any(zstrong == 0)
+sum(is.nan(zstrong))
+
+```
+
+
+```{r  }
+
+par(mfrow = c(2,2))
+plot(zstrong[,1], zstrong[,2], pch = 20, cex = 0.1, main = "both_brain")
+plot(zstrong[,1], zstrong[,5], pch = 20, cex = 0.1, main = "brain+heart")
+plot(zstrong[,2], zstrong[,4], pch = 20, cex = 0.1, main = "brain+heart")
+plot(zstrong[,4], zstrong[,5], pch = 20, cex = 0.1, main = "both_heart")
+
+```
+
+## empirical covariance matrix
+```{r  }
+
+matrix(t(zstrong) %*% zstrong/nrow(zstrong), nrow = 5, ncol = 5)
+
+```
